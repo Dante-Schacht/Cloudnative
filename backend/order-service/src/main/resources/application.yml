@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: order-service
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      accept-float-as-int: false
+
+server:
+  port: 8080
+
+cloudorders:
+  cors:
+    # Orígenes permitidos separados por coma; no usar "*".
+    allowed-origins: http://localhost:5173
