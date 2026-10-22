@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: notification-service
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    connection-timeout: 3s
+    listener:
+      simple:
+        acknowledge-mode: manual      # ACK/NACK explícito en el código
+        default-requeue-rejected: false
+        missing-queues-fatal: false   # permite iniciar antes que order-service declare la topología
+        prefetch: 10
+        concurrency: 1
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+cloudorders:
+  rabbitmq:
+    # Colas consumidas (la topología la declara order-service).
+    queues:
+      created:
+        name: orders.created.queue
+      audit:
+        name: orders.audit.queue
+      inventory:
+        name: orders.inventory.queue
+  processing:
+    max-attempts: 3                 # intentos totales por mensaje antes de enviarlo a la DLQ
+    backoff: 1s                     # espera fija entre intentos
+    idempotency-cache-size: 10000   # eventId recordados en memoria por consumidor
+    simulation:
+      # Solo para pruebas locales: permite provocar fallos con marcas en las observaciones del pedido.
+      enabled: false

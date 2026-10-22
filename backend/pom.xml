@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.cloudorders</groupId>
+    <artifactId>cloudorders-backend</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>cloudorders-backend</name>
+    <description>Agregador de los microservicios de CloudOrders</description>
+
+    <modules>
+        <module>messaging-contract</module>
+        <module>order-service</module>
+        <module>notification-service</module>
+        <module>rabbitmq-admin-service</module>
+    </modules>
+</project>

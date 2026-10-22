@@ -7,10 +7,43 @@ spring:
     deserialization:
       accept-float-as-int: false
 
+  rabbitmq:
+    # Lista de nodos del clúster; el cliente prueba cada dirección. Credenciales solo por entorno.
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    connection-timeout: 3s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
 server:
   port: 8080
 
 cloudorders:
+  rabbitmq:
+    # Nombres centralizados de la topología (order-service la declara al iniciar).
+    exchange: orders.exchange              # topic
+    dead-letter-exchange: orders.dlx       # direct
+    order-created-routing-key: orders.created
+    publish-timeout: 5s
+    queues:
+      created:
+        name: orders.created.queue
+        binding-key: orders.created
+        dead-letter-routing-key: orders.created.dead
+        dead-letter-queue: orders.created.dlq
+      audit:
+        name: orders.audit.queue
+        binding-key: "orders.#"
+        dead-letter-routing-key: orders.audit.dead
+        dead-letter-queue: orders.audit.dlq
+      inventory:
+        name: orders.inventory.queue
+        binding-key: orders.created
+        dead-letter-routing-key: orders.inventory.dead
+        dead-letter-queue: orders.inventory.dlq
   cors:
     # Orígenes permitidos separados por coma; no usar "*".
     allowed-origins: http://localhost:5173

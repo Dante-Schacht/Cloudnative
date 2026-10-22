@@ -1,0 +1,8 @@
+spring:
+  rabbitmq:
+    username: test
+    password: test
+
+cloudorders:
+  rabbitmq:
+    declare-on-startup: false

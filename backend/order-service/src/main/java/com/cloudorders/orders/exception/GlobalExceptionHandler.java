@@ -1,6 +1,7 @@
 package com.cloudorders.orders.exception;
 
 import com.cloudorders.orders.dto.ApiError;
+import com.cloudorders.orders.messaging.EventPublicationException;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -51,6 +52,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiError> handleBusiness(BusinessException ex) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), List.of());
+    }
+
+    @ExceptionHandler(EventPublicationException.class)
+    public ResponseEntity<ApiError> handleEventPublication(EventPublicationException ex) {
+        log.error("No se pudo confirmar el evento del pedido; el pedido no fue registrado", ex);
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "No se pudo confirmar la publicación del evento del pedido, por lo que el pedido no fue registrado. "
+                        + "Inténtalo nuevamente más tarde.",
+                List.of());
     }
 
     @ExceptionHandler(Exception.class)

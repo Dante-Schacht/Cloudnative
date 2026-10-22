@@ -1,0 +1,123 @@
+name: cloudorders
+
+x-rabbitmq-node: &rabbitmq-node
+  image: rabbitmq:4.1-management
+  restart: unless-stopped
+  environment: &rabbitmq-env
+    RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:?defina RABBITMQ_ERLANG_COOKIE en .env}
+    RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?defina RABBITMQ_USERNAME en .env}
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD en .env}
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+    interval: 15s
+    timeout: 10s
+    retries: 10
+    start_period: 40s
+  networks: [cloudorders]
+
+x-rabbitmq-client-env: &rabbitmq-client-env
+  RABBITMQ_ADDRESSES: rabbitmq1:5672,rabbitmq2:5672
+  RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?defina RABBITMQ_USERNAME en .env}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD en .env}
+
+x-service-dependencies: &broker-ready
+  rabbitmq1:
+    condition: service_healthy
+  rabbitmq2:
+    condition: service_healthy
+
+services:
+  order-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: order-service
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq-client-env
+      CLOUDORDERS_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on: *broker-ready
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [cloudorders]
+
+  notification-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: notification-service
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq-client-env
+      CLOUDORDERS_PROCESSING_SIMULATION_ENABLED: ${NOTIFICATION_SIMULATION_ENABLED:-false}
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on: *broker-ready
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health/liveness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [cloudorders]
+
+  rabbitmq-admin-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: rabbitmq-admin-service
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq-client-env
+      ADMIN_API_USERNAME: ${ADMIN_API_USERNAME:?defina ADMIN_API_USERNAME en .env}
+      ADMIN_API_PASSWORD: ${ADMIN_API_PASSWORD:?defina ADMIN_API_PASSWORD en .env}
+    ports:
+      # Solo accesible desde la propia máquina; la API exige autenticación HTTP Basic.
+      - "127.0.0.1:8082:8082"
+    depends_on: *broker-ready
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health/liveness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [cloudorders]
+
+  rabbitmq1:
+    <<: *rabbitmq-node
+    hostname: rabbitmq1
+    environment:
+      <<: *rabbitmq-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq1
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq1-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+
+  rabbitmq2:
+    <<: *rabbitmq-node
+    hostname: rabbitmq2
+    environment:
+      <<: *rabbitmq-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq2
+    ports:
+      - "127.0.0.1:5673:5672"
+      - "127.0.0.1:15673:15672"
+    volumes:
+      - rabbitmq2-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+
+networks:
+  cloudorders:
+
+volumes:
+  rabbitmq1-data:
+  rabbitmq2-data:

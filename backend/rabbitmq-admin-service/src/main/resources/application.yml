@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: rabbitmq-admin-service
+  rabbitmq:
+    addresses: ${RABBITMQ_ADDRESSES:localhost:5672,localhost:5673}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    connection-timeout: 3s
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+cloudorders:
+  admin:
+    # Solo se pueden crear/eliminar recursos cuyo nombre empiece con este prefijo; así la API
+    # no puede alterar la topología en uso (orders.*). Credenciales HTTP Basic solo por entorno.
+    managed-prefix: sandbox.
+    username: ${ADMIN_API_USERNAME}
+    password: ${ADMIN_API_PASSWORD}

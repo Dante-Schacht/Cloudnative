@@ -1,0 +1,7 @@
+# Credenciales y variables locales: nunca subir a GitHub (usar .env.example como plantilla)
+.env
+.env.*
+!.env.example
+
+# Artefactos de compilación
+target/

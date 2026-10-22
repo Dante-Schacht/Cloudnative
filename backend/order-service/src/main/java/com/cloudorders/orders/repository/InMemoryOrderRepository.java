@@ -34,6 +34,11 @@ public class InMemoryOrderRepository implements OrderRepository {
         return orders.values().stream().sorted(Comparator.comparing(Order::id)).toList();
     }
 
+    @Override
+    public void deleteById(Long id) {
+        orders.remove(id);
+    }
+
     /** Vacía el almacenamiento; pensado para aislar las pruebas. */
     public void clear() {
         orders.clear();

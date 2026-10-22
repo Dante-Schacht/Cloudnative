@@ -1,0 +1,9 @@
+spring:
+  rabbitmq:
+    username: test
+    password: test
+
+cloudorders:
+  admin:
+    username: admin-test
+    password: test-password-123

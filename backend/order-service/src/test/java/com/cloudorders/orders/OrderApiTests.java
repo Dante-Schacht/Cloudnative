@@ -1,5 +1,10 @@
 package com.cloudorders.orders;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -7,17 +12,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.cloudorders.orders.messaging.EventPublicationException;
+import com.cloudorders.orders.messaging.OrderEventPublisher;
+import com.cloudorders.orders.model.Order;
+import com.cloudorders.orders.model.OrderStatus;
 import com.cloudorders.orders.repository.InMemoryOrderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
 class OrderApiTests {
 
     private static final String VALID_ORDER = """
@@ -29,9 +42,46 @@ class OrderApiTests {
     @Autowired
     private InMemoryOrderRepository repository;
 
+    @MockitoBean
+    private OrderEventPublisher eventPublisher;
+
     @BeforeEach
     void clean() {
         repository.clear();
+    }
+
+    @Test
+    void publishesOrderCreatedEventForAcceptedOrder() throws Exception {
+        mockMvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(VALID_ORDER))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<Order> published = ArgumentCaptor.forClass(Order.class);
+        verify(eventPublisher).publishOrderCreated(published.capture());
+        assertThat(published.getValue().customerName()).isEqualTo("Juan Pérez");
+        assertThat(published.getValue().status()).isEqualTo(OrderStatus.PENDING);
+    }
+
+    @Test
+    void failsWithServiceUnavailableAndRollsBackWhenEventIsNotConfirmed() throws Exception {
+        doThrow(new EventPublicationException("sin confirmación")).when(eventPublisher).publishOrderCreated(any());
+
+        mockMvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(VALID_ORDER))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value(503))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("no fue registrado")));
+
+        mockMvc.perform(get("/api/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void doesNotPublishWhenRequestIsInvalid() throws Exception {
+        mockMvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"product\":\"Notebook\",\"quantity\":2}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
