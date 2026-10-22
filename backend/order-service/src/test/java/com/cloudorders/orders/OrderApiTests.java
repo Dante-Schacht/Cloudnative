@@ -16,38 +16,51 @@ import com.cloudorders.orders.messaging.EventPublicationException;
 import com.cloudorders.orders.messaging.OrderEventPublisher;
 import com.cloudorders.orders.model.Order;
 import com.cloudorders.orders.model.OrderStatus;
-import com.cloudorders.orders.repository.InMemoryOrderRepository;
+import com.cloudorders.orders.repository.OrderJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+
+/** Contrato HTTP de pedidos con un usuario autenticado que tiene ambos scopes (la seguridad se prueba aparte). */
 @SpringBootTest
-@AutoConfigureMockMvc
 @ActiveProfiles("test")
 class OrderApiTests {
 
     private static final String VALID_ORDER = """
             {"customerName":"Juan Pérez","product":"Notebook","quantity":2,"notes":"Entrega por la tarde"}""";
 
-    @Autowired
     private MockMvc mockMvc;
 
     @Autowired
-    private InMemoryOrderRepository repository;
+    private WebApplicationContext context;
+
+    @Autowired
+    private OrderJpaRepository repository;
 
     @MockitoBean
     private OrderEventPublisher eventPublisher;
 
     @BeforeEach
     void clean() {
-        repository.clear();
+        repository.deleteAll();
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .apply(springSecurity())
+                .defaultRequest(get("/").with(jwt().authorities(
+                        new SimpleGrantedAuthority("SCOPE_orders.read"),
+                        new SimpleGrantedAuthority("SCOPE_orders.write"))))
+                .build();
     }
 
     @Test

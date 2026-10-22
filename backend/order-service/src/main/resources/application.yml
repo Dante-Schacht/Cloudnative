@@ -18,6 +18,21 @@ spring:
     template:
       mandatory: true
 
+  datasource:
+    # Local: PostgreSQL de docker-compose. Cloud SQL: ver application-cloud.yml y docs/ARQUITECTURA_CLOUD.md.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cloudorders}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # el esquema lo gestiona solo Flyway (db/migration)
+  flyway:
+    enabled: true
+
 server:
   port: 8080
 
@@ -47,3 +62,12 @@ cloudorders:
   cors:
     # Orígenes permitidos separados por coma; no usar "*".
     allowed-origins: http://localhost:5173
+  security:
+    jwt:
+      # Microsoft Entra ID (tokens v2). Sin tenant/audience configurados toda petición protegida responde 401.
+      tenant-id: ${ENTRA_TENANT_ID:}
+      audience: ${ENTRA_API_AUDIENCE:}
+      issuer: ${ENTRA_ISSUER:}          # opcional; por defecto https://login.microsoftonline.com/{tenant}/v2.0
+      jwk-set-uri: ${ENTRA_JWKS_URI:}   # opcional; por defecto .../{tenant}/discovery/v2.0/keys
+      read-scope: orders.read
+      write-scope: orders.write

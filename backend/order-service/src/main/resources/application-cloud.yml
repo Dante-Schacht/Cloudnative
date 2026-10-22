@@ -1,0 +1,21 @@
+# Perfil "cloud" (SPRING_PROFILES_ACTIVE=cloud): Cloud Run + Cloud SQL para PostgreSQL.
+# Todo valor sensible llega por variables de entorno; en Cloud Run, DB_PASSWORD proviene de Secret Manager
+# (gcloud run deploy ... --set-secrets DB_PASSWORD=cloudorders-db-password:latest).
+spring:
+  datasource:
+    # Ejemplo (IP privada de Cloud SQL, TLS obligatorio):
+    #   jdbc:postgresql://10.x.x.x:5432/cloudorders?sslmode=require
+    url: ${DB_URL}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:3}   # Cloud SQL f1-micro admite pocas conexiones simultáneas
+      connection-timeout: 10000
+      max-lifetime: 1500000                  # menor que el tiempo de inactividad de conexiones del entorno
+
+server:
+  port: ${PORT:8080}                         # Cloud Run inyecta PORT
+  forward-headers-strategy: framework
+
+cloudorders:
+  rabbitmq:
+    # Cola/exchanges ya declarados por order-service al iniciar; la VM de RabbitMQ no es accesible desde Internet.
+    publish-timeout: 8s

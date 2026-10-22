@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import OrderForm from '../components/OrderForm.jsx'
 import OrdersTable from '../components/OrdersTable.jsx'
 import { createOrder, listOrders } from '../services/api.js'
+import { getAccount, login } from '../auth/auth.js'
+import { isAuthConfigured } from '../auth/authConfig.js'
 
 const BACKEND_MESSAGES = {
   checking: 'Verificando conexión con el backend.',
@@ -15,6 +17,8 @@ export default function OrdersPage({ backend, onRetry }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const connected = backend.status === 'connected'
+  const needsLogin = isAuthConfigured() && !getAccount()
+  const canUseApi = connected && !needsLogin
 
   const loadOrders = useCallback(async (signal) => {
     setLoading(true)
@@ -42,10 +46,16 @@ export default function OrdersPage({ backend, onRetry }) {
       )
       return undefined
     }
+    if (needsLogin) {
+      setOrders([])
+      setLoading(false)
+      setError('Inicia sesión para ver los pedidos.')
+      return undefined
+    }
     const controller = new AbortController()
     loadOrders(controller.signal)
     return () => controller.abort()
-  }, [connected, backend.status, loadOrders])
+  }, [connected, needsLogin, backend.status, loadOrders])
 
   const handleCreate = async (order) => {
     try {
@@ -66,8 +76,14 @@ export default function OrdersPage({ backend, onRetry }) {
           <button type="button" className="link-button" onClick={onRetry}>Reintentar</button>
         </p>
       )}
+      {connected && needsLogin && (
+        <p className="notice notice--warning" role="status">
+          Debes iniciar sesión con tu cuenta de Microsoft para ver y crear pedidos.{' '}
+          <button type="button" className="link-button" onClick={() => login()}>Iniciar sesión</button>
+        </p>
+      )}
       <div className="grid">
-        <OrderForm onSubmit={handleCreate} disabled={!connected} />
+        <OrderForm onSubmit={handleCreate} disabled={!canUseApi} />
         <OrdersTable orders={orders} loading={loading} error={error} />
       </div>
     </>

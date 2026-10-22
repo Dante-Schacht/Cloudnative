@@ -1,4 +1,5 @@
 import BackendStatus from './BackendStatus.jsx'
+import AuthButton from './AuthButton.jsx'
 
 const links = [
   { route: 'inicio', href: '#/', label: 'Inicio' },
@@ -29,6 +30,7 @@ export default function Header({ route, backend }) {
           </ul>
         </nav>
         <BackendStatus status={backend.status} compact />
+        <AuthButton />
       </div>
     </header>
   )

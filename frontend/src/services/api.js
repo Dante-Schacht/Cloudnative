@@ -1,8 +1,13 @@
-// Contrato provisional con el backend Spring Boot (debe coordinarse antes de implementarlo):
-//   GET  /api/health  -> 200 si el backend está operativo
+// Contrato HTTP con el backend Spring Boot (order-service):
+//   GET  /api/health  -> 200 si el backend está operativo (público)
 //   GET  /api/orders  -> lista de pedidos [{ id, customerName, product, quantity, notes, status, createdAt }]
 //   POST /api/orders  -> crea un pedido { customerName, product, quantity, notes } y devuelve el pedido creado
+// /api/orders exige un access token JWT de Microsoft Entra ID (cabecera Authorization: Bearer).
 // Estados válidos: PENDING, PROCESSING, COMPLETED, FAILED.
+// VITE_API_BASE_URL apunta al backend en local y a la URL de API Gateway en el despliegue cloud.
+import { getAccessToken, getAccount } from '../auth/auth.js'
+import { isAuthConfigured } from '../auth/authConfig.js'
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
 
 export const ENDPOINTS = {
@@ -26,17 +31,31 @@ export function isApiConfigured() {
   return API_BASE_URL !== ''
 }
 
-async function request(path, { signal, parse = true, ...options } = {}) {
+async function bearerHeaders(authenticated) {
+  if (!authenticated) return {}
+  if (!isAuthConfigured()) {
+    throw new ApiError('El inicio de sesión no está configurado (VITE_ENTRA_*).', { status: 401 })
+  }
+  if (!getAccount()) {
+    throw new ApiError('Debes iniciar sesión para usar esta función.', { status: 401 })
+  }
+  const token = await getAccessToken()
+  if (!token) throw new ApiError('Redirigiendo al inicio de sesión…', { status: 401 })
+  return { Authorization: `Bearer ${token}` }
+}
+
+async function request(path, { signal, parse = true, authenticated = true, ...options } = {}) {
   if (!isApiConfigured()) {
     throw new ApiError('La URL del backend no está configurada (VITE_API_BASE_URL).')
   }
 
+  const authHeaders = await bearerHeaders(authenticated)
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   let response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: { Accept: 'application/json', ...options.headers },
+      headers: { Accept: 'application/json', ...authHeaders, ...options.headers },
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     })
   } catch (error) {
@@ -44,6 +63,14 @@ async function request(path, { signal, parse = true, ...options } = {}) {
     throw new ApiError('No se pudo conectar con el backend. Verifica que esté en ejecución.')
   }
 
+  if (response.status === 401 || response.status === 403) {
+    throw new ApiError(
+      response.status === 401
+        ? 'Tu sesión no es válida o expiró. Vuelve a iniciar sesión.'
+        : 'Tu usuario no tiene permisos para esta operación.',
+      { status: response.status },
+    )
+  }
   if (!response.ok) {
     throw new ApiError(`El backend respondió con un error (código ${response.status}).`, {
       status: response.status,
@@ -78,7 +105,7 @@ export function createOrder(order) {
 export async function checkBackend(signal) {
   if (!isApiConfigured()) return { status: 'unconfigured' }
   try {
-    await request(ENDPOINTS.health, { signal, parse: false })
+    await request(ENDPOINTS.health, { signal, parse: false, authenticated: false })
     return { status: 'connected' }
   } catch (error) {
     if (signal?.aborted) throw error

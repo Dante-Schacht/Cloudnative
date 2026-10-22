@@ -40,4 +40,7 @@ Estados: `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`.
 La aplicación no muestra datos ficticios: sin backend, indica "Backend desconectado" y la tabla queda vacía.
 
 ## Fuera de alcance de esta etapa
-Backend Spring Boot, RabbitMQ, Docker, JWT, Microsoft Entra ID, AWS API Gateway y base de datos.
+Despliegue en la nube (Cloud Run, API Gateway): ver [../docs/ARQUITECTURA_CLOUD.md](../docs/ARQUITECTURA_CLOUD.md).
+
+## Autenticación (Microsoft Entra ID)
+`src/auth` usa MSAL (`@azure/msal-browser`) con Authorization Code Flow + PKCE; no hay client secret. `src/services/api.js` envía el access token en `Authorization: Bearer` a `/api/orders`. Configurar `VITE_ENTRA_*` en `.env` (ver `.env.example`); sin esos valores el botón indica "Login no configurado" y el backend responde 401.

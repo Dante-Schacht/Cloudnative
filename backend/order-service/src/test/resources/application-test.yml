@@ -2,7 +2,17 @@ spring:
   rabbitmq:
     username: test
     password: test
+  datasource:
+    # H2 en modo PostgreSQL: las migraciones de Flyway se ejecutan igual que en producción.
+    url: jdbc:h2:mem:cloudorders;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
 
 cloudorders:
   rabbitmq:
     declare-on-startup: false
+  security:
+    jwt:
+      tenant-id: test-tenant
+      audience: api://cloudorders-test

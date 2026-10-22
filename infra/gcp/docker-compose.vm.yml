@@ -1,0 +1,108 @@
+name: cloudorders-vm
+
+# VM de Compute Engine: clúster RabbitMQ de dos nodos + consumidores + API administrativa.
+# Se ejecuta DESDE LA RAÍZ DEL REPOSITORIO:
+#   docker compose --env-file .env -f infra/gcp/docker-compose.vm.yml up -d --build
+# Variables necesarias en .env (además de las de RabbitMQ y ADMIN_API_*):
+#   VM_INTERNAL_IP   IP interna de la VM en la VPC (la usan los clientes de Cloud Run para llegar a AMQP)
+# AMQP solo escucha en la IP interna; Management y la API de administración solo en 127.0.0.1 (acceso por
+# túnel IAP/SSH). Ningún puerto de RabbitMQ se publica en Internet.
+
+x-rabbitmq-node: &rabbitmq-node
+  image: rabbitmq:4.1-management
+  restart: unless-stopped
+  environment: &rabbitmq-env
+    RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE:?defina RABBITMQ_ERLANG_COOKIE en .env}
+    RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?defina RABBITMQ_USERNAME en .env}
+    RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD en .env}
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+    interval: 15s
+    timeout: 10s
+    retries: 10
+    start_period: 40s
+  networks: [cloudorders]
+
+x-rabbitmq-client-env: &rabbitmq-client-env
+  RABBITMQ_ADDRESSES: rabbitmq1:5672,rabbitmq2:5672
+  RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?defina RABBITMQ_USERNAME en .env}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD en .env}
+
+x-broker-ready: &broker-ready
+  rabbitmq1:
+    condition: service_healthy
+  rabbitmq2:
+    condition: service_healthy
+
+services:
+  rabbitmq1:
+    <<: *rabbitmq-node
+    hostname: rabbitmq1
+    environment:
+      <<: *rabbitmq-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq1
+    ports:
+      - "${VM_INTERNAL_IP:?defina VM_INTERNAL_IP en .env}:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq1-data:/var/lib/rabbitmq
+      - ../rabbitmq/cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+
+  rabbitmq2:
+    <<: *rabbitmq-node
+    hostname: rabbitmq2
+    environment:
+      <<: *rabbitmq-env
+      RABBITMQ_NODENAME: rabbit@rabbitmq2
+    ports:
+      - "${VM_INTERNAL_IP:?defina VM_INTERNAL_IP en .env}:5673:5672"
+      - "127.0.0.1:15673:15672"
+    volumes:
+      - rabbitmq2-data:/var/lib/rabbitmq
+      - ../rabbitmq/cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+
+  notification-service:
+    build:
+      context: ../../backend
+      args:
+        SERVICE: notification-service
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq-client-env
+      CLOUDORDERS_PROCESSING_SIMULATION_ENABLED: "false"
+    depends_on: *broker-ready
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health/liveness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [cloudorders]
+
+  rabbitmq-admin-service:
+    build:
+      context: ../../backend
+      args:
+        SERVICE: rabbitmq-admin-service
+    restart: unless-stopped
+    environment:
+      <<: *rabbitmq-client-env
+      ADMIN_API_USERNAME: ${ADMIN_API_USERNAME:?defina ADMIN_API_USERNAME en .env}
+      ADMIN_API_PASSWORD: ${ADMIN_API_PASSWORD:?defina ADMIN_API_PASSWORD en .env}
+    ports:
+      - "127.0.0.1:8082:8082"
+    depends_on: *broker-ready
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health/liveness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [cloudorders]
+
+networks:
+  cloudorders:
+
+volumes:
+  rabbitmq1-data:
+  rabbitmq2-data:
