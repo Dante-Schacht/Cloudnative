@@ -47,7 +47,8 @@ comparten red con RabbitMQ, lo que además cumple el requisito de mostrar *docke
 | **Región** | Usar `us-central1` para todo. API Gateway solo está disponible en un subconjunto de regiones (verificar con `gcloud api-gateway gateways create --help` / documentación) y mantener Cloud SQL, Cloud Run y la VM en la misma región evita latencia y costo de tráfico. Desde Chile la latencia ronda los 150 ms; es aceptable para la demostración. |
 | **API Gateway usa OpenAPI 2.0** | Por eso la especificación es `swagger: "2.0"`. |
 | **JWT de Entra en API Gateway** | `x-google-issuer`, `x-google-jwks_uri` y `x-google-audiences` aceptan cualquier emisor OIDC. Con tokens **v2** el emisor es `https://login.microsoftonline.com/{tenant}/v2.0` y `aud` es el **client ID (GUID) de la API**. Hay que fijar `requestedAccessTokenVersion = 2` en el manifiesto de la API; con v1 el emisor es `sts.windows.net` y `aud` es `api://…`, y la validación fallaría. |
-| **Authorization reemplazado** | Con `jwt_audience`, API Gateway sustituye `Authorization` por un ID token de Google y deja el token original en `X-Forwarded-Authorization`. `order-service` ya lee esa cabecera primero (`JwtValidationConfig#bearerTokenResolver`). *Comportamiento a confirmar en el primer despliegue real.* |
+| **Authorization reemplazado** | Con `x-google-backend` (y `jwt_audience`), API Gateway sustituye `Authorization` por un ID token de Google y copia el original a `X-Forwarded-Authorization`. **Confirmado en la documentación oficial** ([openapi-extensions](https://cloud.google.com/endpoints/docs/openapi/openapi-extensions) y [Auth0/JWT en API Gateway](https://cloud.google.com/api-gateway/docs/authenticating-users-auth0)): el backend debe verificar el JWT de esa cabecera, que es lo que hace `JwtValidationConfig#bearerTokenResolver`. Falta confirmarlo en el primer despliegue real. |
+| **Evitar el gateway** | `order-service` en Cloud Run se despliega con `--no-allow-unauthenticated` y solo la cuenta de servicio del gateway tiene `roles/run.invoker`: una llamada directa a la URL `run.app` responde 403. Aun así el backend valida el JWT de Entra por sí mismo (defensa en profundidad). |
 | **CORS** | API Gateway no responde CORS: la especificación define `OPTIONS /api/orders` sin seguridad y `order-service` genera las cabeceras. Debe incluir el origen del frontend desplegado (`CLOUDORDERS_CORS_ALLOWED_ORIGINS`). |
 | **Cloud Run → VM** | *Direct VPC egress* (sin conector con costo fijo). Firewall: AMQP 5672/5673 solo desde el rango de la subred de Cloud Run. |
 | **Cloud Run → Cloud SQL** | IP privada (acceso privado a servicios) + `sslmode=require`. Alternativa: socket factory de Cloud SQL. |
@@ -196,3 +197,20 @@ Eliminación posterior (también requiere autorización): `gateways`, `api-confi
 **Costos / decisiones para ti**: cambia el comportamiento observable (ya no hay 503 por broker caído; el evento llega con
 retraso) y obliga a actualizar `OrderApiTests`. Recomendación: **primero completar la demostración** con el mecanismo actual
 y, solo si hay tiempo, implementar el outbox. **Decisión pendiente tuya.**
+
+## 7. Plan de recursos para autorización (consulta de precios del 22-10-2026)
+
+Fuentes: página oficial de precios de API Gateway (2 M de llamadas/mes gratis, luego US$3 por millón) y resúmenes de precios de Cloud Run, Cloud SQL y Compute Engine
+obtenidos por búsqueda web (no desde la calculadora oficial: **confirmar en https://cloud.google.com/products/calculator** antes de aprobar).
+
+| Recurso a crear (un solo proyecto nuevo, región `us-central1`) | Facturable | Costo aprox. |
+|---|---|---|
+| Cloud Run `order-service` y `frontend` (`min-instances=0`) | Gratis dentro de 2 M solicitudes/mes | ≈ 0 |
+| API Gateway (1 API, 1 config, 1 gateway) | Gratis hasta 2 M llamadas/mes | ≈ 0 |
+| Cloud SQL PostgreSQL 16 `db-f1-micro`, 10 GB, IP privada | Sí | ≈ US$0,015/h (≈ US$11/mes) + almacenamiento |
+| VM `e2-medium` (4 GB: 2 nodos RabbitMQ + 2 servicios Java), disco 20 GB, IP externa efímera | Sí | ≈ US$0,034/h (≈ US$24,5/mes) + disco/IP ≈ US$3 |
+| Artifact Registry, Secret Manager, VPC peering | Ínfimo | ≈ US$1 |
+
+Con los recursos encendidos **≈ US$2,5 por día** (≈ US$0,06/h entre Cloud SQL y la VM). Para 3–4 días de preparación y demostración: **≈ US$8–12 en total**, si
+después se eliminan. `e2-small` (2 GB) no se recomienda: RabbitMQ x2 y dos JVM no caben con holgura.
+Requisitos previos: cuenta de Google con **facturación habilitada** (crédito de prueba si aplica) y `gcloud` instalado; no se ha hecho ninguna de las dos cosas.

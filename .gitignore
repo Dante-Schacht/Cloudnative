@@ -8,3 +8,6 @@ target/
 
 # Especificación de API Gateway ya renderizada (contiene IDs del tenant)
 openapi-rendered.yaml
+
+# Contraseña del usuario de prueba de Entra ID generada por infra/entra/setup-entra.ps1
+.secrets/

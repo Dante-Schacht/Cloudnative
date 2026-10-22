@@ -50,6 +50,7 @@ docker compose exec rabbitmq1 rabbitmqctl cluster_status   # debe listar rabbit@
 - PostgreSQL local: `127.0.0.1:5432` (`POSTGRES_*` de `.env`). El esquema lo crea Flyway (`backend/order-service/src/main/resources/db/migration`). Los datos persisten en el volumen `postgres-data`.
 - Puertos publicados solo en `127.0.0.1`. Detener: `docker compose down` (añadir `-v` borra los datos del broker **y de PostgreSQL**).
 - `GET`/`POST /api/orders` exigen un access token JWT de Entra ID: **sin `ENTRA_TENANT_ID` y `ENTRA_API_AUDIENCE` responden 401**. `/api/health` es público.
+- Entra ID: tras `az login --allow-no-subscriptions`, `.\infra\entra\setup-entra.ps1` registra las apps API y SPA, los scopes `orders.read`/`orders.write` y un usuario de prueba, y completa `.env` y `frontend/.env` (la contraseña del usuario queda en `.secrets/`, ignorado por git).
 - Frontend: `cd frontend; copy .env.example .env; npm install; npm run dev` (completar `VITE_ENTRA_*` tras registrar las apps en Entra ID).
 - Pruebas: `cd backend/order-service; .\mvnw.cmd -f ..\pom.xml test` (ejecuta los 3 servicios; el test de integración con PostgreSQL usa Testcontainers y se omite si Docker no está disponible; ninguno requiere RabbitMQ).
 
